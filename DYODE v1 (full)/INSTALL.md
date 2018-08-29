@@ -27,13 +27,16 @@ Below is an example of such a configuration file
 config_name: "Dyode test"
 config_version : 1.0
 config_date: 2016-05-04
+max_bitrate: 100
 
 dyode_in:
   ip: 10.0.1.1
   mac: b8:27:eb:89:1e:f3
+  iface: enp0s25
 dyode_out:
   ip: 10.0.1.2
   mac: b8:27:eb:b1:ff:ab
+  iface: eth0
 
 modules:
   "Partage de fichier 1":

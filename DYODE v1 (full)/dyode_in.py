@@ -1,32 +1,30 @@
 # -*- coding: utf-8 -*-
-import dyode
-import time
-import sys
-import yaml
-import pyinotify
+import asyncore
 import logging
-from math import floor
-import subprocess
 import multiprocessing
 import shlex
-import asyncore
-import modbus
-import os
-import screen
+import subprocess
+from math import floor
 
-# Max bitrate, empirical, should be a bit less than 100 but isn't
-MAX_BITRATE = 8
+import pyinotify
+import yaml
+
+import dyode
+import modbus
+import screen
 
 # Logging
 logging.basicConfig()
 log = logging.getLogger()
 log.setLevel(logging.DEBUG)
 
+
 class EventHandler(pyinotify.ProcessEvent):
     def process_IN_CLOSE_WRITE(self, event):
         log.info('New file detected :: %s' % event.pathname)
         # If a new file is detected, launch the copy
         dyode.file_copy(multiprocessing.current_process()._args)
+
 
 # When a new file finished copying in the input folder, send it
 def watch_folder(properties):
@@ -36,7 +34,7 @@ def watch_folder(properties):
     wm = pyinotify.WatchManager()
     mask = pyinotify.IN_CLOSE_WRITE
     notifier = pyinotify.AsyncNotifier(wm, EventHandler())
-    wdd = wm.add_watch(properties['in'], mask, rec = True)
+    wdd = wm.add_watch(properties['in'], mask, rec=True)
     log.debug('watching :: %s' % properties['in'])
     asyncore.loop()
 
@@ -67,9 +65,14 @@ if __name__ == '__main__':
     log.info('Configuration date : %s' % config['config_date'])
 
     # Static ARP
-    log.info('Dyode input ip : %s (%s)' % (config['dyode_in']['ip'], config['dyode_in']['mac']))
-    log.info('Dyode output ip : %s (%s)' % (config['dyode_out']['ip'], config['dyode_out']['mac']))
-    p = subprocess.Popen(shlex.split('arp -s ' + config['dyode_out']['ip'] + ' ' + config['dyode_out']['mac']), shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    log.info('Dyode input ip : %s (%s)' % (
+        config['dyode_in']['ip'], config['dyode_in']['mac']))
+    log.info('Dyode output ip : %s (%s)' % (
+        config['dyode_out']['ip'], config['dyode_out']['mac']))
+    command = 'arp -s {} {}'.format(config['dyode_out']['ip'],
+                                    config['dyode_out']['mac'])
+    p = subprocess.Popen(shlex.split(command), shell=False,
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     output, err = p.communicate()
 
     # Number of modules (needed to calculate bitrate)
@@ -78,15 +81,19 @@ if __name__ == '__main__':
     # TODO : Needs to be updated for socket transfer
     modules_nb = len((config['modules']))
     log.debug('Number of modules : %s' % len(config['modules']))
-    bitrate = floor(MAX_BITRATE / modules_nb)
+    bitrate = floor(config['max_bitrate'] / modules_nb)
     log.debug('Max bitrate per module : %s mbps' % bitrate)
 
     # Iterate on modules
     modules = config.get('modules')
     for module, properties in modules.iteritems():
+        properties['dyode_in'] = config['dyode_in']
+        properties['dyode_out'] = config['dyode_out']
+
         log.debug('Parsing %s' % module)
         log.debug('Trying to launch a new process for module %s' % module)
-        p = multiprocessing.Process(name=str(module), target=launch_agents, args=(module, properties))
+        p = multiprocessing.Process(name=str(module), target=launch_agents,
+                                    args=(module, properties))
         p.start()
 
     # TODO : Check if all modules are still alive and restart the ones that are not
